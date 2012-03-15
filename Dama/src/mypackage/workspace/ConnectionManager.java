@@ -24,7 +24,6 @@ public class ConnectionManager implements PacketListener {
 
 	public ConnectionManager(String nomeMio, String passMia, String nomeAvversario,
 			MessageReceiver mr) {
-		super();
 		this.nomeMio = nomeMio;
 		this.nomeAvversario = nomeAvversario + "@ppl.eln.uniroma2.it";
 		this.mr = mr;

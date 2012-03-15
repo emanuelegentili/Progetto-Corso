@@ -2,36 +2,45 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
-    android:orientation="vertical" >
-
-    
+    android:orientation="vertical" 
+    android:background="@drawable/images_iniziale">
+
     <TextView
         android:id="@+id/textView1"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:text="Nome Utente Proprio" />
+        android:gravity="center"
+        android:text="Nome Utente Proprio"
+        android:textSize="15sp"
+        android:textStyle="bold" />
     
     <EditText
         android:id="@+id/nomeProprio"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content" />
-
+
     <TextView
         android:id="@+id/password"
-        android:layout_width="wrap_content"
+        android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:text="Password" />
+        android:gravity="center"
+        android:text="Password"
+        android:textSize="15sp"
+        android:textStyle="bold" />
 
     <EditText
         android:id="@+id/passMia"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content" />
-
+
     <TextView
         android:id="@+id/textView2"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:text="Nome Utente Avversario" />
+        android:gravity="center"
+        android:text="Nome Utente Avversario"
+        android:textSize="15sp"
+        android:textStyle="bold" />
 
     <EditText
         android:id="@+id/nomeAvversario"
@@ -44,6 +53,8 @@
         android:id="@+id/gioca"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|bottom"
+        android:textStyle="bold"
         android:text="Gioca" />
 
 </LinearLayout>

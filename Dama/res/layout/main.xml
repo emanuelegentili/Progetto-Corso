@@ -8,6 +8,7 @@
             android:id="@+id/miaGriglia"
             android:layout_width="fill_parent"
             android:layout_height="fill_parent"
+            android:layout_gravity="center"
             android:horizontalSpacing="1dp"
             android:numColumns="8"
             android:verticalSpacing="1dp" />

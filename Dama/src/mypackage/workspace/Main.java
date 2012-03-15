@@ -6,9 +6,11 @@ import java.util.TimerTask;
 import android.app.Activity;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.Vibrator;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -23,6 +25,7 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.AdapterView.OnItemLongClickListener;
 
 public class Main extends Activity implements MessageReceiver {
+
 	// disable screen rotation in android applicatione (stackoverflow)
 	protected static final int SHOW_TOAST = 0;
 	protected static final int FAI_MOSSA = 1;
@@ -35,11 +38,16 @@ public class Main extends Activity implements MessageReceiver {
 	public String TAG = "workspace.Dama1.main";
 	int vite_mie = 12, vite_avv = 12;
 
+	// audio di win/lose
+	MediaPlayer mp_win;
+	MediaPlayer mp_lose;
+
 	// variabili che mi servono per la dama,ossia l'array e le immagini e il
 	// colore delle mie pedine
 	static int[] array_gioco;
 	Resources res;
 	static boolean colore = false, miocolore = false;
+	static boolean mangiata_doppia = false;
 
 	private String pack = "", pack_arr = "";
 
@@ -76,13 +84,17 @@ public class Main extends Activity implements MessageReceiver {
 
 		// PRENDO I NOMI
 		String nomeProprio = getIntent().getExtras().getString("NOMEPROP");
-		String password = getIntent().getExtras().getString("PASS");
 		String nomeAvversario = getIntent().getExtras().getString("NOMEAVV");
+		String passMia = getIntent().getExtras().getString("PASSMIA");
+
+		mp_win = MediaPlayer.create(Main.this, R.raw.win); // /CREO SUONI PER
+															// WIN/LOSE
+		mp_lose = MediaPlayer.create(Main.this, R.raw.lose);
 
 		// String players = getIntent().getExtras().getString("PLAYERS");
 		// tv.setText(nomeProprio + " Vs " + nomeAvversario);
 		// INIZIALIZZAZIONE CONNESSIONE
-		connection = new ConnectionManager(nomeProprio, password,
+		connection = new ConnectionManager(nomeProprio, passMia,
 				nomeAvversario, this);
 
 		// verifico chi inizia prima e verifico il mio COLORE
@@ -90,7 +102,6 @@ public class Main extends Activity implements MessageReceiver {
 			// Inizio io
 			statoCorrente = Stato.WAIT_FOR_START_ACK;
 			timer.schedule(sendStart, 1000, 5000);
-		//	statoCorrente = Stato.WAIT_FOR_START_ACK;
 			colore = true; // sono bianco
 		} else {
 			// Inizia lui
@@ -131,6 +142,23 @@ public class Main extends Activity implements MessageReceiver {
 		});
 
 	}
+		
+	public void onPause() {
+		timer.cancel();
+		finish();
+		super.onPause();
+		Log.d(TAG, "OnPause, chiudo connessione");
+		}
+
+		public void onResume(){
+		super.onResume();
+		Log.d(TAG, "OnResume, rinizializzo connessione");
+		}
+
+		public void onRestart(){
+		super.onRestart();
+		Log.d(TAG, "OnRestart");
+		}
 
 	public void gestione_click(int row, int column) {
 
@@ -153,9 +181,10 @@ public class Main extends Activity implements MessageReceiver {
 				array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = a;
 				// faccio la prima parte del pacchetto indico se dama o pedina e
 				// le posizioni
-				impacchetto(pedina_o_dama_string(riga_selezionata,colonna_selezionata), riga_selezionata,
+				impacchetto(
+						pedina_o_dama_string(riga_selezionata,
+								colonna_selezionata), riga_selezionata,
 						colonna_selezionata);
-
 				// gli restituisco il suo valore
 				// qua ristampo la scacchiera con quella selezionata e le
 				// posizioni dove posso andare
@@ -169,8 +198,10 @@ public class Main extends Activity implements MessageReceiver {
 				svuoto_pacchetto();
 				stampa();
 				statoCorrente = Stato.TOCCA_ME;
+
 			} else { // significa che ci posso andare
-				if (array_gioco[pos_array(row, column)] == 0) {
+				if (array_gioco[pos_array(row, column)] == 0
+						&& !mangiata_doppia) {
 					// muovo il pezzo senza problemi
 					array_gioco[pos_array(row, column)] = array_gioco[pos_array(
 							riga_selezionata, colonna_selezionata)];
@@ -189,25 +220,47 @@ public class Main extends Activity implements MessageReceiver {
 					if (mangiata_singola(row, column) != 0) { // posso mangiare
 																// e ci vado
 						mangio(row, column);
-						chiudo_pacchetto();
 						// mangiata_doppia
-						// verifica trasforma dama e se se qualcuno ha vinto
-						// converto_in_dama(row, column);
-						stampa();
+						if (!mangiata_doppia) { // concedo un altra mossa se è
+												// vero,altrimenti finisco il
+												// turnoe invio il pacchetto
+							if (vite_avv == 0) {
+								stampa();
+								statoCorrente = Stato.HO_VINTO;
+								chiudo_pacchetto();
+								mp_win.start();
+								connection.send("HAI_PERSO!" + pack);
+								svuoto_pacchetto();
+								Toast toast = Toast.makeText(Main.this,
+										"HO VINTO", Toast.LENGTH_SHORT);
+								toast.show();
+
+							} else {
+								chiudo_pacchetto();
+								stampa();
+								connection.send("VAI:" + pack);
+								statoCorrente = Stato.TOCCA_LUI;
+								svuoto_pacchetto();
+							}
+						}
+					} else if (mangiata_doppia) {
 						if (vite_avv == 0) {
 							statoCorrente = Stato.HO_VINTO;
+							chiudo_pacchetto();
 							connection.send("HAI_PERSO!" + pack);
 							svuoto_pacchetto();
-							Toast toast = Toast.makeText(Main.this,
-									"Hai vinto", Toast.LENGTH_SHORT);
+							Toast toast = Toast.makeText(Main.this, "HO VINTO",
+									Toast.LENGTH_SHORT);
 							toast.show();
 
 						} else {
+							chiudo_pacchetto();
+							stampa();
 							connection.send("VAI:" + pack);
 							statoCorrente = Stato.TOCCA_LUI;
 							svuoto_pacchetto();
 						}
-						// devo inserire mangiata doppia
+						mangiata_doppia = false;
 					} else { // altirmenti mi ritrovo nell stesso stato di prima
 						Toast toast = Toast
 								.makeText(
@@ -227,12 +280,12 @@ public class Main extends Activity implements MessageReceiver {
 			toast.show();
 
 		} else if (statoCorrente == Stato.HO_PERSO) {
-			Toast toast = Toast.makeText(Main.this, "Hai perso!!",
+			Toast toast = Toast.makeText(Main.this, "HO PERSO",
 					Toast.LENGTH_SHORT);
 			toast.show();
 
 		} else if (statoCorrente == Stato.HO_VINTO) {
-			Toast toast = Toast.makeText(Main.this, "Hai vinto!!",
+			Toast toast = Toast.makeText(Main.this, "HO VINTO",
 					Toast.LENGTH_SHORT);
 			toast.show();
 
@@ -245,28 +298,23 @@ public class Main extends Activity implements MessageReceiver {
 		// inserisco i tipi di messaggi ricevuti e faccio i vari controlli con i
 		// stati
 		if (msg.equals("START")) {
-			if (statoCorrente == Stato.WAIT_FOR_START){
-			connection.send("COMINCIA");
-			statoCorrente=Stato.TOCCA_LUI;
-			}
-			else{
+			if (statoCorrente == Stato.WAIT_FOR_START) {
+				connection.send("COMINCIA");
+				statoCorrente = Stato.TOCCA_LUI;
+			} else {
 				Log.e(TAG, "Ricevuto START ma lo stato è " + statoCorrente);
 			}
-		}
-		else if(msg.equals("COMINCIA")){
-			
+		} else if (msg.equals("COMINCIA")) {
+			statoCorrente = Stato.TOCCA_ME;
+
 			Message osmsg = handler.obtainMessage(Main.SHOW_TOAST);
 			Bundle b = new Bundle();
 			b.putString("toast", "Vai!!"); // invio il boundle con la stringa e
 											// il pacchetto mosse
 			osmsg.setData(b);
 			handler.sendMessage(osmsg);
-			
 			timer.cancel();
-			statoCorrente = Stato.TOCCA_ME;
-				
-		
-			
+
 		} else if (msg.startsWith("VAI")) {
 			pack_arr = msg.split(":")[1]; // splitta in array diviso da :
 
@@ -283,12 +331,14 @@ public class Main extends Activity implements MessageReceiver {
 		} else if (msg.startsWith("HAI_PERSO")) {
 			pack_arr = msg.split("!")[1];
 
+			mp_lose.start();
 			Message osmsg = handler.obtainMessage(Main.HAI_PERSO);
 			Bundle b = new Bundle();
 			b.putString("mossa", pack_arr); // invio il boundle con la stringa e
 											// il pacchetto mosse
 			osmsg.setData(b);
 			handler.sendMessage(osmsg);
+
 			svuoto_pacchettoARR();
 			statoCorrente = Stato.HO_PERSO;
 		}
@@ -300,6 +350,15 @@ public class Main extends Activity implements MessageReceiver {
 		@Override
 		public void handleMessage(android.os.Message msg) {
 			switch (msg.what) {
+			case Main.SHOW_TOAST:
+				String toast2 = msg.getData().getString("toast");
+				Log.d(TAG, "dentro handler è arrivata la mossa " + toast2);
+				Toast toast1 = Toast.makeText(Main.this, toast2,
+						Toast.LENGTH_SHORT);
+				toast1.show();
+
+				break;
+
 			case Main.FAI_MOSSA:
 				String mossa = msg.getData().getString("mossa");
 				Log.d(TAG, "dentro handler è arrivata la mossa " + mossa);
@@ -308,20 +367,13 @@ public class Main extends Activity implements MessageReceiver {
 				break;
 
 			case Main.HAI_PERSO:
-				Toast toast = Toast.makeText(Main.this, "Hai perso!!",
+				Toast toast = Toast.makeText(Main.this, "HO PERSO",
 						Toast.LENGTH_SHORT);
 				toast.show();
+
 				String mossaVinc = msg.getData().getString("mossa");
 				decompilatore(mossaVinc);
 				stampa();
-				break;
-				
-			case Main.SHOW_TOAST:
-				String message = msg.getData().getString("toast");
-				Toast toast2 = Toast.makeText(Main.this, message,
-						Toast.LENGTH_SHORT);
-				toast2.show();
-				Log.d(TAG, "dentro handler è arrivata la mossa " + message);
 				break;
 
 			default:
@@ -357,9 +409,8 @@ public class Main extends Activity implements MessageReceiver {
 		 * faccio anche controllo se si è mosso in riga 8 allora converto pedona
 		 * in dama e dopo di tutto F per definire la fine
 		 */
-		int i = 0, riga = 0, colonna = 0;
+		int i = 0, riga = 0, colonna = 0, riga_tipo = 0, colonna_tipo = 0;
 		String tipo = "";
-		int riga_tipo = 0, colonna_tipo = 0;
 		Log.d(TAG, "pack_arr= " + pack_arr);
 
 		while (!(pack_arr.substring(i, i + 1)).equals("F")) { // fintanto che
@@ -408,12 +459,7 @@ public class Main extends Activity implements MessageReceiver {
 
 				if (tipo.equals("P")) { // se è una pedina
 					if (converto_in_damaB((9 - riga), colonna_tipo) == false) {
-						array_gioco[pos_array(riga, colonna)] = restit_pedina(!colore); // !colore
-																						// per
-																						// restituire
-																						// la
-																						// pedina
-																						// dell'avversario
+						array_gioco[pos_array(riga, colonna)] = restit_pedina(!colore);
 					} else {
 						array_gioco[pos_array(riga, colonna)] = restit_dama(!colore);
 					}
@@ -426,16 +472,19 @@ public class Main extends Activity implements MessageReceiver {
 	}
 
 	void pack_mangio(int row, int column) {
-
 		pack = (pack + "E" + (9 - row) + (9 - column));
-
 	}
 
 	int pos_array(int row, int column) {
 		int count = 8;
 		count = ((count * row) - (8 - column)) - 1;
+		if (count > 63 || count < 0) {
+			Log.d(TAG, "array sballato" + count);
+			return 1;
+		} else {
 
-		return count;
+			return count;
+		}
 	}
 
 	boolean pos_arrayB(int row, int column) {
@@ -448,7 +497,7 @@ public class Main extends Activity implements MessageReceiver {
 
 	void stampa() {
 		// CONVERTO array di gioco con array per la stampa
-		ImageButton[] imgb = new ImageButton[64];
+		// ImageButton[] imgb = new ImageButton[64];
 		Drawable[] img = new Drawable[64];
 
 		for (int i = 0; i < 64; i++) {
@@ -745,8 +794,29 @@ public class Main extends Activity implements MessageReceiver {
 				array_gioco[pos_array(row, column)] = 0;
 				pack_mangio(row, column);
 				array_gioco[pos_array(row - 1, column + 1)] = a;
-				impacchetto("M", row - 1, column + 1);
 				converto_in_dama(row - 1, column + 1);
+				riga_selezionata = row - 1;
+				colonna_selezionata = column + 1;
+
+				if (mangiata_doppia(row - 1, column + 1) != 0) { // posso
+																	// mangiare
+																	// ancora
+					Log.d(TAG, "entrato in mangiata doppia avanti a destra");
+					mangiata_doppia = true;
+					// solo per stampare la dama dopo aver mangiato con la
+					// pedina da muovere selezionata
+					a = array_gioco[pos_array(riga_selezionata,
+							colonna_selezionata)];
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = contenuto_casella_selezionata(
+							riga_selezionata, colonna_selezionata);
+					stampa();
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = a;
+				} else {
+					riga_selezionata = row;
+					colonna_selezionata = column;
+					impacchetto("M", row - 1, column + 1);
+					mangiata_doppia = false;
+				}
 
 				vite_avv -= 1;
 
@@ -756,8 +826,30 @@ public class Main extends Activity implements MessageReceiver {
 				array_gioco[pos_array(row, column)] = 0;
 				pack_mangio(row, column);
 				array_gioco[pos_array(row - 1, column - 1)] = a;
-				impacchetto("M", row - 1, column - 1);
 				converto_in_dama(row - 1, column - 1);
+				riga_selezionata = row - 1;
+				colonna_selezionata = column - 1;
+
+				if (mangiata_doppia(row - 1, column - 1) != 0) { // posso
+																	// mangiare
+																	// ancora
+					Log.d(TAG, "entrato in mangiata doppia avanti a sinistra");
+					mangiata_doppia = true;
+					// solo per stampare la dama dopo aver mangiato con la
+					// pedina da muovere selezionata
+					a = array_gioco[pos_array(riga_selezionata,
+							colonna_selezionata)];
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = contenuto_casella_selezionata(
+							riga_selezionata, colonna_selezionata);
+					stampa();
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = a;
+				} else {
+					riga_selezionata = row;
+					colonna_selezionata = column;
+					impacchetto("M", row - 1, column - 1);
+					mangiata_doppia = false;
+				}
+
 				vite_avv -= 1;
 
 			} else if (mangiata_singola(row, column) == 3) { // indietro a
@@ -767,8 +859,31 @@ public class Main extends Activity implements MessageReceiver {
 				array_gioco[pos_array(row, column)] = 0;
 				pack_mangio(row, column);
 				array_gioco[pos_array(row + 1, column + 1)] = a;
-				impacchetto("M", row + 1, column + 1);
 				converto_in_dama(row + 1, column + 1);
+				
+				riga_selezionata = row + 1;
+				colonna_selezionata = column + 1;
+
+				if (mangiata_doppia(row + 1, column + 1) != 0) { // posso
+																	// mangiare
+																	// ancora
+					Log.d(TAG, "entrato in mangiata doppia avanti a sinistra");
+					mangiata_doppia = true;
+					// solo per stampare la dama dopo aver mangiato con la
+					// pedina da muovere selezionata
+					a = array_gioco[pos_array(riga_selezionata,
+							colonna_selezionata)];
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = contenuto_casella_selezionata(
+							riga_selezionata, colonna_selezionata);
+					stampa();
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = a;
+				} else {
+					riga_selezionata = row;
+					colonna_selezionata = column;
+					impacchetto("M", row + 1, column + 1);
+					mangiata_doppia = false;
+				}
+				
 				vite_avv -= 1;
 
 			} else if (mangiata_singola(row, column) == 4) { // indietro a
@@ -778,8 +893,31 @@ public class Main extends Activity implements MessageReceiver {
 				array_gioco[pos_array(row, column)] = 0;
 				pack_mangio(row, column);
 				array_gioco[pos_array(row + 1, column - 1)] = a;
-				impacchetto("M", row + 1, column - 1);
 				converto_in_dama(row + 1, column - 1);
+				
+				riga_selezionata = row + 1;
+				colonna_selezionata = column - 1;
+
+				if (mangiata_doppia(row + 1, column - 1) != 0) { // posso
+																	// mangiare
+																	// ancora
+					Log.d(TAG, "entrato in mangiata doppia avanti a sinistra");
+					mangiata_doppia = true;
+					// solo per stampare la dama dopo aver mangiato con la
+					// pedina da muovere selezionata
+					a = array_gioco[pos_array(riga_selezionata,
+							colonna_selezionata)];
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = contenuto_casella_selezionata(
+							riga_selezionata, colonna_selezionata);
+					stampa();
+					array_gioco[pos_array(riga_selezionata, colonna_selezionata)] = a;
+				} else {
+					riga_selezionata = row;
+					colonna_selezionata = column;
+					impacchetto("M", row + 1, column - 1);
+					mangiata_doppia = false;
+				}
+
 				vite_avv -= 1;
 			}
 		}
@@ -836,10 +974,13 @@ public class Main extends Activity implements MessageReceiver {
 					&& colonna_selezionata < column
 					&& ((array_gioco[pos_array(riga_selezionata,
 							colonna_selezionata)] == 5) || (array_gioco[pos_array(
-							riga_selezionata, colonna_selezionata)] == 4))) {
-				// indietro a
-				// destra se è
-				// una dama
+							riga_selezionata, colonna_selezionata)] == 4))) { // indietro
+																				// a
+																				// destra
+																				// se
+																				// è
+																				// una
+																				// dama
 				if (array_gioco[pos_array(row + 1, column + 1)] == 0
 						&& pos_arrayB(row + 1, column + 1)) {
 					return 3;
@@ -850,10 +991,13 @@ public class Main extends Activity implements MessageReceiver {
 					&& colonna_selezionata > column
 					&& ((array_gioco[pos_array(riga_selezionata,
 							colonna_selezionata)] == 5) || (array_gioco[pos_array(
-							riga_selezionata, colonna_selezionata)] == 4))) {
-				// indietro a
-				// sinistra se è
-				// una dama
+							riga_selezionata, colonna_selezionata)] == 4))) { // indietro
+																				// a
+																				// sinistra
+																				// se
+																				// è
+																				// una
+																				// dama
 				if (array_gioco[pos_array(row + 1, column - 1)] == 0
 						&& pos_arrayB(row + 1, column - 1)) {
 					return 4;
@@ -866,6 +1010,33 @@ public class Main extends Activity implements MessageReceiver {
 		} else {
 			return 0;
 		}
+
+	}
+
+	int mangiata_doppia(int row, int column) {
+
+		if (array_gioco[pos_array(row - 1, column + 1)] != 0
+				&& array_gioco[pos_array(row - 2, column + 2)] == 0
+				&& (array_gioco[pos_array(row - 2, column + 2)] != 1)) {
+			return 2;
+		} else if (array_gioco[pos_array(row - 1, column - 1)] != 0
+				&& array_gioco[pos_array(row - 2, column - 2)] == 0
+				&& array_gioco[pos_array(row - 2, column + 2)] != 1) {
+			return 1;
+		} else if (array_gioco[pos_array(row + 1, column - 1)] != 0
+				&& array_gioco[pos_array(row + 2, column - 2)] == 0
+				&& array_gioco[pos_array(row - 2, column + 2)] != 1
+				&& (contenuto_casella(row, column) == 3 || contenuto_casella(
+						row, column) == 4)) {
+			return 4;
+		} else if (array_gioco[pos_array(row + 1, column + 1)] != 0
+				&& array_gioco[pos_array(row + 2, column + 2)] == 0
+				&& array_gioco[pos_array(row - 2, column + 2)] != 1
+				&& (contenuto_casella(row, column) == 3 || contenuto_casella(
+						row, column) == 4)) {
+			return 3;
+		} else
+			return 0;
 
 	}
 
